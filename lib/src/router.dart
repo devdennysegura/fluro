@@ -43,16 +43,25 @@ class Router {
       bool clearStack = false,
       TransitionType transition,
       Duration transitionDuration = const Duration(milliseconds: 250),
-      RouteTransitionsBuilder transitionBuilder}) {
+      RouteTransitionsBuilder transitionBuilder,
+      dynamic object}) {
     RouteMatch routeMatch = matchRoute(context, path,
         transitionType: transition,
         transitionsBuilder: transitionBuilder,
-        transitionDuration: transitionDuration);
+        transitionDuration: transitionDuration,
+        object: object);
+
     Route<dynamic> route = routeMatch.route;
     Completer completer = new Completer();
     Future future = completer.future;
+
     if (routeMatch.matchType == RouteMatchType.nonVisual) {
       completer.complete("Non visual route type.");
+      // if (routeMatch.handler.type == HandlerType.future) {
+      //   future = routeMatch.handler
+      //       .handlerFunc(context, routeMatch.parameters, routeMatch.object);
+      // }
+      // completer.complete();
     } else {
       if (route == null && notFoundHandler != null) {
         route = _notFoundRoute(context, path);
@@ -95,7 +104,8 @@ class Router {
       {RouteSettings routeSettings,
       TransitionType transitionType,
       Duration transitionDuration = const Duration(milliseconds: 250),
-      RouteTransitionsBuilder transitionsBuilder}) {
+      RouteTransitionsBuilder transitionsBuilder,
+      dynamic object}) {
     RouteSettings settingsToUse = routeSettings;
     if (routeSettings == null) {
       settingsToUse = new RouteSettings(name: path);
@@ -110,13 +120,23 @@ class Router {
     if (route == null && notFoundHandler == null) {
       return new RouteMatch(
           matchType: RouteMatchType.noMatch,
-          errorMessage: "No matching route was found");
+          errorMessage: "No matching route was found",
+          handler: handler);
     }
     Map<String, List<String>> parameters =
         match?.parameters ?? <String, List<String>>{};
     if (handler.type == HandlerType.function) {
       handler.handlerFunc(buildContext, parameters);
-      return new RouteMatch(matchType: RouteMatchType.nonVisual);
+      return new RouteMatch(
+          matchType: RouteMatchType.nonVisual, handler: handler);
+    }
+
+    if (handler.type == HandlerType.future) {
+      return new RouteMatch(
+          matchType: RouteMatchType.nonVisual,
+          handler: handler,
+          parameters: parameters,
+          object: object);
     }
 
     RouteCreator creator =
@@ -128,7 +148,7 @@ class Router {
             settings: routeSettings,
             fullscreenDialog: transition == TransitionType.nativeModal,
             builder: (BuildContext context) {
-              return handler.handlerFunc(context, parameters);
+              return handler.handlerFunc(context, parameters, object);
             });
       } else {
         var routeTransitionsBuilder;
@@ -141,7 +161,7 @@ class Router {
           settings: routeSettings,
           pageBuilder: (BuildContext context, Animation<double> animation,
               Animation<double> secondaryAnimation) {
-            return handler.handlerFunc(context, parameters);
+            return handler.handlerFunc(context, parameters, object);
           },
           transitionDuration: transitionDuration,
           transitionsBuilder: routeTransitionsBuilder,
@@ -149,9 +169,9 @@ class Router {
       }
     };
     return new RouteMatch(
-      matchType: RouteMatchType.visual,
-      route: creator(settingsToUse, parameters),
-    );
+        matchType: RouteMatchType.visual,
+        route: creator(settingsToUse, parameters),
+        handler: handler);
   }
 
   RouteTransitionsBuilder _standardTransitionsBuilder(
